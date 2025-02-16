@@ -13,6 +13,10 @@ import assemblyai as aai
 from elevenlabs.client import ElevenLabs
 from elevenlabs import stream
 import ollama
+import sounddevice as sd
+import subprocess
+from typing import Iterator
+
 
 def read_env():
     """Load key-value pairs from .env into os.environ."""
@@ -29,6 +33,7 @@ class AIVoiceAgent:
     def __init__(self):
         # Load environment variables
         read_env()
+        self.mpv_process = None
 
         # Set AssemblyAI API key
         aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
@@ -54,6 +59,35 @@ class AIVoiceAgent:
         self.tts_thread = None
         self.stop_tts_event = threading.Event()
 
+        self.threads = []
+
+    def m_stream(self, audio_stream: Iterator[bytes]) -> bytes:
+
+        mpv_command = ["mpv", "--no-cache", "--no-terminal", "--", "fd://0"]
+        self.mpv_process = subprocess.Popen(
+            mpv_command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        audio = b""
+
+        for chunk in audio_stream:
+            if self.stop_tts_event.is_set():
+                print("[inside m_stream: AI speech interrupted!]")
+                self.mpv_process.terminate()
+                return
+            if chunk is not None and self.mpv_process:
+                self.mpv_process.stdin.write(chunk)  # type: ignore
+                self.mpv_process.stdin.flush()  # type: ignore
+                audio += chunk
+        if self.mpv_process.stdin:
+            self.mpv_process.stdin.close()
+        self.mpv_process.wait()
+
+        return audio
+
     def start_transcription(self):
         """
         Start real-time transcription and keep it running indefinitely
@@ -69,9 +103,12 @@ class AIVoiceAgent:
         )
         self.transcriber.connect()
 
+
         # Default microphone stream from AssemblyAI
-        microphone_stream = aai.extras.MicrophoneStream(sample_rate=16_000, device_index=1)
+        microphone_stream = aai.extras.MicrophoneStream(sample_rate=16_000)
         self.transcriber.stream(microphone_stream)
+
+
 
     def on_open(self, session_opened: aai.RealtimeSessionOpened):
         print("AssemblyAI session opened:", session_opened.session_id)
@@ -87,10 +124,14 @@ class AIVoiceAgent:
 
         # If TTS is playing and user is speaking, barge-in:
         if self.tts_thread and self.tts_thread.is_alive():
-            # This means the AI is talking. Let's interrupt it.
+            print("[inside on_data: TTS is playing and user is speaking, barge-in]")
+            # Set the stop flag immediately without waiting
             self.stop_tts_event.set()
-            # Wait for TTS thread to exit so we don't talk over ourselves
-            self.tts_thread.join()
+            if self.mpv_process:
+                self.mpv_process.terminate()
+            # Don't wait for join here - let the audio stream abort
+            self.tts_thread = None  # Allow new thread to be created
+
 
         if isinstance(transcript, aai.RealtimeFinalTranscript):
             # This final transcript is what we send to the AI
@@ -119,7 +160,7 @@ class AIVoiceAgent:
         print("\nUser:", user_text)
 
         # 2. Call Ollama in streaming mode
-        print("DeepSeek R1 is thinking...\n")
+
         ollama_stream = ollama.chat(
             model="llama3.2:1b",  # or your model name
             messages=self.full_transcript,
@@ -128,10 +169,14 @@ class AIVoiceAgent:
 
         # 3. Use a separate thread to speak out the AI response
         self.stop_tts_event.clear()  # reset the stop flag
+
+        self.tts_thread = None
+        if self.mpv_process:
+            self.mpv_process.terminate()
+        
         self.tts_thread = threading.Thread(
-            target=self.play_response,
-            args=(ollama_stream,)
-        )
+            target=lambda: self.m_stream(self.play_response(ollama_stream))  # Add stream() call here
+
         self.tts_thread.start()
 
     def play_response(self, ollama_stream):
@@ -143,32 +188,41 @@ class AIVoiceAgent:
         text_buffer = ""
         full_text = ""
 
+        print("initating conv...\n")
+        print(ollama_stream)
+
         for chunk in ollama_stream:
-            # Check if we should stop because user spoke again
+            # Accumulate chunk text
             if self.stop_tts_event.is_set():
                 print("[AI speech interrupted!]")
-                break
-
-            # Accumulate chunk text
+                sd.stop()
+                return
             text_buffer += chunk["message"]["content"]
 
-            # Whenever we hit a period, speak that sentence
-            if text_buffer.endswith("."):
+            # Split on any sentence-ending punctuation for faster response
+            if any(text_buffer.endswith(p) for p in ('.', '!', '?', '...')):
                 sentence = text_buffer
                 text_buffer = ""
 
-                # TTS stream
+                # TTS stream with more frequent interruption checks
+
                 print("[AI partial]:", sentence)
                 audio_stream = self.client.generate(
                     text=sentence,
                     model="eleven_turbo_v2",
                     stream=True
                 )
-                # If user interrupts mid-stream, we can only break between chunks:
+
+                
+                # Stream with immediate interruption support
                 try:
-                    stream(audio_stream)
+                    for audio_chunk in audio_stream:
+                        if self.stop_tts_event.is_set():
+                            raise StopTTSException()
+                        yield audio_chunk  # Directly yield audio chunks
                 except StopTTSException:
-                    print("[AI speech forcibly stopped mid-chunk]")
+                    print("[AI speech stopped mid-chunk]")
+
                     break
 
                 full_text += sentence
@@ -183,10 +237,16 @@ class AIVoiceAgent:
                 stream=True
             )
             try:
-                stream(audio_stream, on_chunk=self._tts_on_chunk)
+
+                for audio_chunk in audio_stream:
+                    if self.stop_tts_event.is_set():
+                        raise StopTTSException()
+                        break
+                    yield audio_chunk
             except StopTTSException:
-                print("[AI speech forcibly stopped mid-chunk]")
-            full_text += text_buffer
+                print("[AI speech stopped mid-chunk]")
+
+
 
         # Add the AI's final text to conversation if not fully interrupted
         if full_text.strip():
