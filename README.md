@@ -21,6 +21,7 @@ This project enables real-time speech-to-text transcription using **AssemblyAI**
 #### ✅ Get API Keys  
 - **AssemblyAI (for speech-to-text):** [Sign up for a free API key](https://www.assemblyai.com/?utm_source=youtube&utm_medium=referral&utm_campaign=yt_smit_28)  
 - **ElevenLabs (for text-to-speech):** [Sign up for an account](https://elevenlabs.io/)  
+- **Put** your api keys in the ```.env``` file. 
 
 #### ✅ Install Ollama  
 DeepSeek R1 is accessed via Ollama. Install Ollama from:  
