@@ -58,6 +58,7 @@ class AIVoiceAgent:
         # For TTS concurrency
         self.tts_thread = None
         self.stop_tts_event = threading.Event()
+
         self.threads = []
 
     def m_stream(self, audio_stream: Iterator[bytes]) -> bytes:
@@ -87,7 +88,6 @@ class AIVoiceAgent:
 
         return audio
 
-
     def start_transcription(self):
         """
         Start real-time transcription and keep it running indefinitely
@@ -103,9 +103,12 @@ class AIVoiceAgent:
         )
         self.transcriber.connect()
 
+
         # Default microphone stream from AssemblyAI
         microphone_stream = aai.extras.MicrophoneStream(sample_rate=16_000)
         self.transcriber.stream(microphone_stream)
+
+
 
     def on_open(self, session_opened: aai.RealtimeSessionOpened):
         print("AssemblyAI session opened:", session_opened.session_id)
@@ -128,6 +131,7 @@ class AIVoiceAgent:
                 self.mpv_process.terminate()
             # Don't wait for join here - let the audio stream abort
             self.tts_thread = None  # Allow new thread to be created
+
 
         if isinstance(transcript, aai.RealtimeFinalTranscript):
             # This final transcript is what we send to the AI
@@ -156,6 +160,7 @@ class AIVoiceAgent:
         print("\nUser:", user_text)
 
         # 2. Call Ollama in streaming mode
+
         ollama_stream = ollama.chat(
             model="llama3.2:1b",  # or your model name
             messages=self.full_transcript,
@@ -164,13 +169,14 @@ class AIVoiceAgent:
 
         # 3. Use a separate thread to speak out the AI response
         self.stop_tts_event.clear()  # reset the stop flag
+
         self.tts_thread = None
         if self.mpv_process:
             self.mpv_process.terminate()
         
         self.tts_thread = threading.Thread(
             target=lambda: self.m_stream(self.play_response(ollama_stream))  # Add stream() call here
-        )
+
         self.tts_thread.start()
 
     def play_response(self, ollama_stream):
@@ -181,6 +187,7 @@ class AIVoiceAgent:
         """
         text_buffer = ""
         full_text = ""
+
         print("initating conv...\n")
         print(ollama_stream)
 
@@ -198,12 +205,14 @@ class AIVoiceAgent:
                 text_buffer = ""
 
                 # TTS stream with more frequent interruption checks
+
                 print("[AI partial]:", sentence)
                 audio_stream = self.client.generate(
                     text=sentence,
                     model="eleven_turbo_v2",
                     stream=True
                 )
+
                 
                 # Stream with immediate interruption support
                 try:
@@ -213,6 +222,7 @@ class AIVoiceAgent:
                         yield audio_chunk  # Directly yield audio chunks
                 except StopTTSException:
                     print("[AI speech stopped mid-chunk]")
+
                     break
 
                 full_text += sentence
@@ -227,6 +237,7 @@ class AIVoiceAgent:
                 stream=True
             )
             try:
+
                 for audio_chunk in audio_stream:
                     if self.stop_tts_event.is_set():
                         raise StopTTSException()
@@ -234,7 +245,8 @@ class AIVoiceAgent:
                     yield audio_chunk
             except StopTTSException:
                 print("[AI speech stopped mid-chunk]")
-            full_text += text_buffer
+
+
 
         # Add the AI's final text to conversation if not fully interrupted
         if full_text.strip():
