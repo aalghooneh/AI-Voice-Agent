@@ -1,4 +1,0 @@
-assemblyai[extras] 
-ollama
-elevenlabs 
-pyaudio

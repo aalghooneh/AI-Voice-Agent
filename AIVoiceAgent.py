@@ -1,168 +1,154 @@
 #!/usr/bin/env python3
-"""
-Step 1:
-For realtime speech-to-text:
-Sign up for a Free AssemblyAI API Key: 
-https://www.assemblyai.com/?utm_source=youtube&utm_medium=referral&utm_campaign=yt_smit_28
+import os
+import re
+from typing import Callable, Optional
 
-For DeepSeek's R1 model:
-Download Ollama: https://ollama.com
-
-For text-to-speech:
-Sign up for ElevenLabs
-
-Install PortAudio, which is required for real-time transcription:  
-
-    Debian/Ubuntu: apt install portaudio19-dev  
-    MacOS: brew install portaudio 
-
-Additionally, Install Python Libraries  
-Before running this script, install the required dependencies:
-
-    pip install "assemblyai[extras]" 
-    pip install ollama
-    pip install elevenlabs 
-
-If you're on MacOS, also install MPV for audio streaming:  
-
-    brew install mpv
-
-Step 2: Download the DeepSeek R1 Model  
-Since this script uses DeepSeek R1 via Ollama, download the model locally by running:  
-
-    ollama pull deepseek-r1:7b
-
-Step 3: Real-Time Transcription with AssemblyAI  
-The script captures real-time audio from the microphone and converts speech to text using AssemblyAI.  
-This transcription is then sent to the AI model for processing.  
-
-Step 4: AI Response with DeepSeek R1  
-Once a transcript is generated, it is sent to DeepSeek R1 (7B model) via Ollama.  
-The model generates a response, which is then converted into speech using ElevenLabs.  
-
-Step 5: Live Audio Streaming  
-The generated response is streamed back to the user in real-time as speech, using ElevenLabs' text-to-speech engine.  
-"""
-import assemblyai as aai
+import ollama
 from elevenlabs.client import ElevenLabs
 from elevenlabs import stream
-import ollama
-import os
 
+import assemblyai as aai
+from assemblyai.streaming.v3 import (
+    StreamingClient,
+    StreamingClientOptions,
+    StreamingParameters,
+    StreamingEvents,
+    TurnEvent,
+)
+from assemblyai.extras import MicrophoneStream
 
 
 def read_env():
-    f = open(".env", "r")
     try:
+        with open(".env", "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                os.environ[key.strip()] = value.strip()
+    except FileNotFoundError:
+        print("No .env file found — using existing environment variables.")
 
-        lines = f.readlines()
-
-        for line in lines:
-
-            env_vars = line.split("=")
-            if len(env_vars) < 2:
-                continue
-
-            key = env_vars[0].strip()
-            value = env_vars[1].strip()
-
-            os.environ[key] = value # set the environemnt varables
-    except:
-        print("Error reading .env file")
-    
-    f.close()
 
 class AIVoiceAgent:
-    def __init__(self):
+    def __init__(self, on_state_change: Optional[Callable] = None):
         read_env()
-        aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
-        self.client = ElevenLabs(
-            api_key = os.getenv("ELEVENLABS_API_KEY"),
-        )
-
-        self.transcriber = None
+        self._api_key = os.getenv("ASSEMBLYAI_API_KEY")
+        self.elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        self.on_state_change = on_state_change or (lambda state, text="": None)
+        self._client: Optional[StreamingClient] = None
+        self._mic: Optional[MicrophoneStream] = None
+        self._busy = False
 
         self.full_transcript = [
-            {"role":"system", "content":"You are a language model called R1 created by DeepSeek, answer the questions being asked in less than 300 characters."},
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful, concise AI voice assistant. "
+                    "Answer clearly and naturally in under 100 words."
+                ),
+            }
         ]
 
+    def _emit(self, state: str, text: str = ""):
+        self.on_state_change(state, text)
+
     def start_transcription(self):
-        print(f"\nReal-time transcription: ", end="\r\n")
-        self.transcriber = aai.RealtimeTranscriber(
-          sample_rate=16_000,
-          on_data=self.on_data,
-          on_error=self.on_error,
-          on_open=self.on_open,
-          on_close=self.on_close,
-      )
-        self.transcriber.connect()
-        microphone_stream = aai.extras.MicrophoneStream(sample_rate=16_000)
-        self.transcriber.stream(microphone_stream)
+        self._busy = False
+        self._emit("listening")
+        print("\n[Listening...]")
+
+        self._client = StreamingClient(
+            StreamingClientOptions(api_key=self._api_key)
+        )
+        self._client.on(StreamingEvents.Turn, self._on_turn)
+        self._client.on(StreamingEvents.Error, self._on_error)
+
+        self._client.connect(StreamingParameters(sample_rate=16_000))
+
+        self._mic = MicrophoneStream(sample_rate=16_000)
+        self._client.stream(self._mic)
 
     def stop_transcription(self):
-      if self.transcriber:
-          self.transcriber.close()
-          self.transcriber = None
+        if self._mic:
+            try:
+                self._mic.close()
+            except Exception:
+                pass
+            self._mic = None
+        if self._client:
+            try:
+                self._client.disconnect()
+            except Exception:
+                pass
+            self._client = None
 
-    def on_open(self, session_opened: aai.RealtimeSessionOpened):
-        #print("Session ID:", session_opened.session_id)
-        return
-    
-    def on_data(self, transcript: aai.RealtimeTranscript):
-        if not transcript.text:
+    def _on_turn(self, client: StreamingClient, event: TurnEvent):
+        if not event.transcript or self._busy:
             return
-
-        if isinstance(transcript, aai.RealtimeFinalTranscript):
-            print(transcript.text)
-            self.generate_ai_response(transcript)
+        if event.end_of_turn:
+            print(f"\nUser: {event.transcript}")
+            self._emit("user", event.transcript)
+            self._busy = True
+            self.generate_ai_response(event.transcript)
         else:
-            print(transcript.text, end="\r")
+            print(event.transcript, end="\r")
 
-    def on_error(self, error: aai.RealtimeError):
-        print("An error occured:", error)
-        return
+    def _on_error(self, client: StreamingClient, error):
+        print(f"[Error] {error}")
+        self._emit("error", str(error))
 
-    def on_close(self):
-        print("Closing Session")
-        return    
-    
-    def generate_ai_response(self, transcript):
+    def generate_ai_response(self, user_text: str):
         self.stop_transcription()
+        self._emit("thinking", user_text)
 
-        self.full_transcript.append({"role":"user", "content":transcript.text})
-        print(f"\nUser:{transcript.text}", end="\r\n")
+        self.full_transcript.append({"role": "user", "content": user_text})
 
         ollama_stream = ollama.chat(
-            model = "deepseek-r1:7b",
-            messages = self.full_transcript,
-            stream = True,
+            model="deepseek-r1:7b",
+            messages=self.full_transcript,
+            stream=True,
         )
 
-        print("DeepSeek R1:", end="\r\n")
+        print("Agent: ", end="", flush=True)
         text_buffer = ""
         full_text = ""
+
         for chunk in ollama_stream:
-            text_buffer += chunk['message']['content']
-            if text_buffer.endswith('.'):
-                audio_stream = self.client.generate(text=text_buffer,
-                                                    model="eleven_turbo_v2",
-                                                    stream=True)
-                print(text_buffer, end="\n", flush=True)
-                stream(audio_stream)
-                full_text += text_buffer
+            text_buffer += chunk["message"]["content"]
+            cleaned = re.sub(r"<think>.*?</think>", "", text_buffer, flags=re.DOTALL)
+
+            if cleaned.endswith((".", "!", "?", ":")):
+                sentence = cleaned.strip()
+                if sentence:
+                    self._emit("speaking", sentence)
+                    print(sentence, flush=True)
+                    audio = self.elevenlabs.text_to_speech.stream(
+                        text=sentence,
+                        voice_id="EXAVITQu4vr4xnSDxMaL",
+                        model_id="eleven_turbo_v2",
+                    )
+                    stream(audio)
+                    full_text += sentence + " "
                 text_buffer = ""
 
-        if text_buffer:
-            audio_stream = self.client.generate(text=text_buffer,
-                                                    model="eleven_turbo_v2",
-                                                    stream=True)
-            print(text_buffer, end="\n", flush=True)
-            stream(audio_stream)
-            full_text += text_buffer
+        remaining = re.sub(r"<think>.*?</think>", "", text_buffer, flags=re.DOTALL).strip()
+        if remaining:
+            self._emit("speaking", remaining)
+            print(remaining, flush=True)
+            audio = self.elevenlabs.text_to_speech.stream(
+                text=remaining,
+                voice_id="EXAVITQu4vr4xnSDxMaL",
+                model_id="eleven_turbo_v2",
+            )
+            stream(audio)
+            full_text += remaining
 
-        self.full_transcript.append({"role":"assistant", "content":full_text})
-
+        self.full_transcript.append({"role": "assistant", "content": full_text.strip()})
         self.start_transcription()
 
-ai_voice_agent = AIVoiceAgent()
-ai_voice_agent.start_transcription()
+
+if __name__ == "__main__":
+    agent = AIVoiceAgent()
+    agent.start_transcription()

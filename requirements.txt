@@ -1,0 +1,6 @@
+assemblyai[extras]
+ollama
+elevenlabs
+pyaudio
+fastapi
+uvicorn[standard]

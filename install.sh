@@ -132,16 +132,22 @@ fi
 
 echo "Installing mpv for audio playback and portaudio for the microphone (done)."
 
-nohub ollama serve > ollamaSrvLog.txt 2>&1 &
+nohup ollama serve > ollamaSrvLog.txt 2>&1 &
 
-# Pull the DeepSeek R1 model and Llama 3B model 
+# Pull the DeepSeek R1 model
 pull_deepseek_r1
-# For better speed llama 3b could do the job
-pull_llama_3b
 
 python -m venv open_agent || python3 -m venv open_agent
 source ./open_agent/bin/activate
 python -m pip install -r requirements.txt || python3 -m pip install -r requirements.txt
 
-
+echo ""
 echo "All installations complete."
+echo ""
+echo "To run the voice agent with the visual orb UI:"
+echo "  source ./open_agent/bin/activate"
+echo "  uvicorn server:app --host 0.0.0.0 --port 8000"
+echo "  Then open http://localhost:8000 in your browser."
+echo ""
+echo "To run without the UI (terminal only):"
+echo "  python AIVoiceAgent.py"
