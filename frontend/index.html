@@ -8,612 +8,406 @@
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      background: #06030f;
+      background: #080810;
       overflow: hidden;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      color: #e0d8ff;
+      font-family: -apple-system, 'Segoe UI', sans-serif;
+      color: #c8c0e8;
       height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 32px;
     }
 
-    #canvas-container {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-    }
-
-    #ui {
+    #orb-wrapper {
       position: relative;
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 28px;
-      pointer-events: none;
-      width: 100%;
-      padding: 0 24px;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      overflow: hidden;
+      /* glow stays ON the orb, not the page */
+      box-shadow:
+        0 0 40px 4px var(--orb-glow, rgba(100,80,220,0.35)),
+        0 0 80px 8px var(--orb-glow, rgba(100,80,220,0.15));
+      transition: box-shadow 0.8s ease;
+      flex-shrink: 0;
     }
 
-    #orb-area {
-      width: 280px;
-      height: 280px;
+    #orb-wrapper canvas {
+      display: block;
+      width: 300px !important;
+      height: 300px !important;
     }
 
     #status-pill {
       display: flex;
       align-items: center;
       gap: 8px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.12);
-      backdrop-filter: blur(12px);
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
       border-radius: 999px;
       padding: 6px 18px;
-      font-size: 13px;
-      letter-spacing: 0.08em;
+      font-size: 12px;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
-      transition: all 0.4s ease;
+      color: rgba(200,190,240,0.7);
     }
 
     #status-dot {
-      width: 8px;
-      height: 8px;
+      width: 7px; height: 7px;
       border-radius: 50%;
-      background: #7c6af7;
-      transition: background 0.4s ease;
+      background: rgba(120,100,220,0.8);
     }
+    #status-dot.listening { background:#34d399; animation: blink 1.2s ease infinite; }
+    #status-dot.thinking  { background:#fbbf24; animation: spin  1.4s linear  infinite; }
+    #status-dot.speaking  { background:#60a5fa; animation: blink 0.5s ease infinite; }
+    #status-dot.error     { background:#f87171; }
 
-    #status-dot.listening { background: #34d399; animation: pulse-dot 1s infinite; }
-    #status-dot.thinking  { background: #fbbf24; animation: spin-hue 1.5s linear infinite; }
-    #status-dot.speaking  { background: #60a5fa; animation: pulse-dot 0.5s infinite; }
-    #status-dot.error     { background: #f87171; }
-
-    @keyframes pulse-dot {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50%       { opacity: 0.5; transform: scale(1.4); }
+    @keyframes blink {
+      0%,100%{ opacity:1; transform:scale(1);   }
+      50%    { opacity:.4; transform:scale(1.5); }
     }
-    @keyframes spin-hue {
-      from { filter: hue-rotate(0deg); }
-      to   { filter: hue-rotate(360deg); }
+    @keyframes spin {
+      from{ filter:hue-rotate(0deg);   }
+      to  { filter:hue-rotate(360deg); }
     }
 
     #transcript {
-      max-width: 520px;
+      max-width: 360px;
       text-align: center;
-      min-height: 64px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #transcript-text {
-      font-size: 16px;
-      line-height: 1.6;
-      color: rgba(220, 210, 255, 0.85);
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 16px;
-      padding: 14px 22px;
-      backdrop-filter: blur(8px);
+      font-size: 14px;
+      line-height: 1.65;
+      color: rgba(200,185,255,0.7);
+      min-height: 48px;
+      padding: 0 8px;
       transition: opacity 0.3s ease;
-      max-width: 100%;
     }
-
-    #transcript-text.fade { opacity: 0; }
+    #transcript.fade { opacity: 0; }
 
     #title {
       position: fixed;
-      top: 28px;
+      top: 24px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 13px;
-      letter-spacing: 0.2em;
+      font-size: 11px;
+      letter-spacing: 0.25em;
       text-transform: uppercase;
-      color: rgba(180,160,255,0.4);
-      z-index: 20;
+      color: rgba(160,140,220,0.3);
     }
 
     #reconnect-notice {
       position: fixed;
-      bottom: 24px;
+      bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 12px;
-      color: rgba(255,100,100,0.6);
+      font-size: 11px;
+      color: rgba(248,113,113,0.6);
       display: none;
-      z-index: 20;
     }
   </style>
 </head>
 <body>
 
-<div id="canvas-container"></div>
-
 <p id="title">AI Voice Agent</p>
 
-<div id="ui">
-  <div id="orb-area"></div>
+<div id="orb-wrapper"></div>
 
-  <div id="status-pill">
-    <div id="status-dot"></div>
-    <span id="status-label">Initializing</span>
-  </div>
-
-  <div id="transcript">
-    <p id="transcript-text">Connecting to agent...</p>
-  </div>
+<div id="status-pill">
+  <div id="status-dot"></div>
+  <span id="status-label">Connecting</span>
 </div>
+
+<p id="transcript">Connecting to agent...</p>
 
 <div id="reconnect-notice">Connection lost — reconnecting…</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/EffectComposer.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/RenderPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/ShaderPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/shaders/CopyShader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
-
 <script>
-// ─── State machine ──────────────────────────────────────────────────────────
+// ── State config ──────────────────────────────────────────────────────────────
 const STATES = {
-  idle:      { label: 'Idle',      colors: ['#4c1d95','#6d28d9','#7c3aed'], bloom: 0.6,  speed: 0.4,  amp: 0.18 },
-  listening: { label: 'Listening', colors: ['#064e3b','#059669','#34d399'], bloom: 1.0,  speed: 0.9,  amp: 0.28 },
-  thinking:  { label: 'Thinking',  colors: ['#78350f','#d97706','#fbbf24'], bloom: 0.9,  speed: 1.4,  amp: 0.35 },
-  speaking:  { label: 'Speaking',  colors: ['#1e3a8a','#3b82f6','#a78bfa'], bloom: 1.4,  speed: 1.8,  amp: 0.55 },
-  error:     { label: 'Error',     colors: ['#7f1d1d','#dc2626','#f87171'], bloom: 0.7,  speed: 0.5,  amp: 0.20 },
-  user:      { label: 'You',       colors: ['#064e3b','#059669','#34d399'], bloom: 1.0,  speed: 0.9,  amp: 0.28 },
+  idle:      { label:'Idle',      glow:'rgba(80,60,180,0.3)',  ca:'#0d0a2e', cb:'#1a0a4a', cc:'#2d1080', speed:0.4, amp:0.12, waveAmp:0.3  },
+  listening: { label:'Listening', glow:'rgba(30,180,120,0.4)', ca:'#001a12', cb:'#003d28', cc:'#00a86b', speed:0.8, amp:0.20, waveAmp:0.5  },
+  thinking:  { label:'Thinking',  glow:'rgba(220,160,30,0.4)', ca:'#1a0d00', cb:'#3d1f00', cc:'#c07010', speed:1.4, amp:0.28, waveAmp:0.65 },
+  speaking:  { label:'Speaking',  glow:'rgba(50,130,255,0.5)', ca:'#000d2e', cb:'#001a6e', cc:'#4080ff', speed:2.2, amp:0.45, waveAmp:1.0  },
+  error:     { label:'Error',     glow:'rgba(220,50,50,0.35)', ca:'#1a0000', cb:'#3d0000', cc:'#c02020', speed:0.5, amp:0.15, waveAmp:0.3  },
+  user:      { label:'You',       glow:'rgba(30,180,120,0.4)', ca:'#001a12', cb:'#003d28', cc:'#00a86b', speed:0.8, amp:0.20, waveAmp:0.5  },
 };
 
 let currentState = 'idle';
-let lerpT = 1.0;
 
 function lerp(a, b, t) { return a + (b - a) * t; }
-function hexToRgb(hex) {
-  const r = parseInt(hex.slice(1,3),16)/255;
-  const g = parseInt(hex.slice(3,5),16)/255;
-  const b = parseInt(hex.slice(5,7),16)/255;
-  return new THREE.Color(r,g,b);
+function hex2rgb(h) {
+  return [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255];
 }
 
-// ─── Three.js setup ─────────────────────────────────────────────────────────
-const container = document.getElementById('canvas-container');
-const W = window.innerWidth, H = window.innerHeight;
+// ── Three.js — contained 300×300 canvas ───────────────────────────────────────
+const SIZE = 300;
+const wrapper = document.getElementById('orb-wrapper');
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(W, H);
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2;
-container.appendChild(renderer.domElement);
+renderer.setSize(SIZE, SIZE);
+wrapper.appendChild(renderer.domElement);
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 100);
-camera.position.z = 3.2;
+const scene  = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-// ─── Post-processing ─────────────────────────────────────────────────────────
-const composer = new THREE.EffectComposer(renderer);
-composer.addPass(new THREE.RenderPass(scene, camera));
-const bloomPass = new THREE.UnrealBloomPass(
-  new THREE.Vector2(W, H), 0.8, 0.7, 0.12
-);
-composer.addPass(bloomPass);
-
-// ─── Simplex noise GLSL ──────────────────────────────────────────────────────
-const noiseGLSL = /* glsl */`
-vec3 mod289(vec3 x){return x-floor(x*(1./289.))*289.;}
-vec4 mod289(vec4 x){return x-floor(x*(1./289.))*289.;}
-vec4 permute(vec4 x){return mod289(((x*34.)+1.)*x);}
+// ── Noise GLSL ─────────────────────────────────────────────────────────────────
+const NOISE = `
+vec3 mod289v3(vec3 x){return x-floor(x*(1./289.))*289.;}
+vec4 mod289v4(vec4 x){return x-floor(x*(1./289.))*289.;}
+vec4 permute(vec4 x){return mod289v4(((x*34.)+1.)*x);}
 vec4 taylorInvSqrt(vec4 r){return 1.7928429-.8537347*r;}
 float snoise(vec3 v){
-  const vec2 C=vec2(1./6.,1./3.);
-  const vec4 D=vec4(0.,.5,1.,2.);
-  vec3 i=floor(v+dot(v,C.yyy));
-  vec3 x0=v-i+dot(i,C.xxx);
-  vec3 g=step(x0.yzx,x0.xyz);
-  vec3 l=1.-g;
-  vec3 i1=min(g.xyz,l.zxy);
-  vec3 i2=max(g.xyz,l.zxy);
-  vec3 x1=x0-i1+C.xxx;
-  vec3 x2=x0-i2+C.yyy;
-  vec3 x3=x0-D.yyy;
-  i=mod289(i);
-  vec4 p=permute(permute(permute(
-    i.z+vec4(0.,i1.z,i2.z,1.))
-   +i.y+vec4(0.,i1.y,i2.y,1.))
-   +i.x+vec4(0.,i1.x,i2.x,1.));
-  float n_=.142857142857;
-  vec3 ns=n_*D.wyz-D.xzx;
-  vec4 j=p-49.*floor(p*ns.z*ns.z);
-  vec4 x_=floor(j*ns.z);
-  vec4 y_=floor(j-7.*x_);
-  vec4 x=x_*ns.x+ns.yyyy;
-  vec4 y=y_*ns.x+ns.yyyy;
-  vec4 h=1.-abs(x)-abs(y);
-  vec4 b0=vec4(x.xy,y.xy);
-  vec4 b1=vec4(x.zw,y.zw);
-  vec4 s0=floor(b0)*2.+1.;
-  vec4 s1=floor(b1)*2.+1.;
-  vec4 sh=-step(h,vec4(0.));
-  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;
-  vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
-  vec3 p0=vec3(a0.xy,h.x);
-  vec3 p1=vec3(a0.zw,h.y);
-  vec3 p2=vec3(a1.xy,h.z);
-  vec3 p3=vec3(a1.zw,h.w);
+  const vec2 C=vec2(1./6.,1./3.);const vec4 D=vec4(0.,.5,1.,2.);
+  vec3 i=floor(v+dot(v,C.yyy));vec3 x0=v-i+dot(i,C.xxx);
+  vec3 g=step(x0.yzx,x0.xyz);vec3 l=1.-g;
+  vec3 i1=min(g.xyz,l.zxy);vec3 i2=max(g.xyz,l.zxy);
+  vec3 x1=x0-i1+C.xxx;vec3 x2=x0-i2+C.yyy;vec3 x3=x0-D.yyy;
+  i=mod289v3(i);
+  vec4 p=permute(permute(permute(i.z+vec4(0.,i1.z,i2.z,1.))+i.y+vec4(0.,i1.y,i2.y,1.))+i.x+vec4(0.,i1.x,i2.x,1.));
+  float n_=.142857142857;vec3 ns=n_*D.wyz-D.xzx;
+  vec4 j=p-49.*floor(p*ns.z*ns.z);vec4 x_=floor(j*ns.z);vec4 y_=floor(j-7.*x_);
+  vec4 x=x_*ns.x+ns.yyyy;vec4 y=y_*ns.x+ns.yyyy;vec4 h=1.-abs(x)-abs(y);
+  vec4 b0=vec4(x.xy,y.xy);vec4 b1=vec4(x.zw,y.zw);
+  vec4 s0=floor(b0)*2.+1.;vec4 s1=floor(b1)*2.+1.;vec4 sh=-step(h,vec4(0.));
+  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+  vec3 p0=vec3(a0.xy,h.x);vec3 p1=vec3(a0.zw,h.y);vec3 p2=vec3(a1.xy,h.z);vec3 p3=vec3(a1.zw,h.w);
   vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
-  p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;
-  vec4 m=max(.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.);
-  m=m*m;
+  p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;
+  vec4 m=max(.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.);m=m*m;
   return 42.*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
 }`;
 
-// ─── Orb shader material ─────────────────────────────────────────────────────
-const orbMaterial = new THREE.ShaderMaterial({
+// ── Ocean fluid plane ──────────────────────────────────────────────────────────
+const fluidMat = new THREE.ShaderMaterial({
   uniforms: {
-    uTime:      { value: 0 },
-    uAmplitude: { value: 0.18 },
-    uSpeed:     { value: 0.4 },
-    uColorA:    { value: hexToRgb('#4c1d95') },
-    uColorB:    { value: hexToRgb('#6d28d9') },
-    uColorC:    { value: hexToRgb('#7c3aed') },
+    uTime:    { value: 0 },
+    uSpeed:   { value: 0.4 },
+    uAmp:     { value: 0.12 },
+    uWaveAmp: { value: 0.3 },
+    uColorA:  { value: new THREE.Vector3(...hex2rgb('#0d0a2e')) },
+    uColorB:  { value: new THREE.Vector3(...hex2rgb('#1a0a4a')) },
+    uColorC:  { value: new THREE.Vector3(...hex2rgb('#2d1080')) },
   },
-  vertexShader: /* glsl */`
-    ${noiseGLSL}
-    uniform float uTime;
-    uniform float uAmplitude;
-    uniform float uSpeed;
-    varying vec3 vNormal;
-    varying vec3 vPosition;
-
-    void main() {
-      vNormal = normalize(normalMatrix * normal);
-      vec3 p = position;
-      float t = uTime * uSpeed;
-      float n  = snoise(p * 2.2 + vec3(t * 0.7, t * 0.5, t * 0.3));
-      float n2 = snoise(p * 4.5 + vec3(-t * 0.4, t * 0.6, t * 0.8)) * 0.5;
-      float n3 = snoise(p * 8.0 + vec3(t * 0.9, -t * 0.3, t * 0.5)) * 0.25;
-      float displacement = (n + n2 + n3) * uAmplitude;
-      p += normal * displacement;
-      vPosition = p;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-    }
-  `,
-  fragmentShader: /* glsl */`
-    uniform float uTime;
-    uniform vec3 uColorA;
-    uniform vec3 uColorB;
-    uniform vec3 uColorC;
-    varying vec3 vNormal;
-    varying vec3 vPosition;
-
-    void main() {
-      vec3 viewDir = normalize(cameraPosition - vPosition);
-      float fresnel = pow(1.0 - clamp(dot(vNormal, viewDir), 0.0, 1.0), 2.5);
-
-      float t  = sin(uTime * 0.6) * 0.5 + 0.5;
-      float t2 = sin(uTime * 0.4 + 1.57) * 0.5 + 0.5;
-      vec3 baseColor = mix(uColorA, uColorB, t);
-      baseColor = mix(baseColor, uColorC, t2 * 0.6);
-
-      vec3 iridColor = mix(uColorC, vec3(1.0, 0.85, 1.0), fresnel);
-      vec3 color = mix(baseColor, iridColor, fresnel * 0.7);
-
-      float alpha = 0.88 + fresnel * 0.12;
-      gl_FragColor = vec4(color, alpha);
-    }
-  `,
-  transparent: true,
-  side: THREE.FrontSide,
-});
-
-const orbGeo = new THREE.SphereGeometry(1, 128, 128);
-const orb = new THREE.Mesh(orbGeo, orbMaterial);
-scene.add(orb);
-
-// ─── Inner glow sphere ────────────────────────────────────────────────────────
-const glowMat = new THREE.ShaderMaterial({
-  uniforms: {
-    uColorA: orbMaterial.uniforms.uColorA,
-    uColorB: orbMaterial.uniforms.uColorB,
-    uTime:   orbMaterial.uniforms.uTime,
-  },
-  vertexShader: `varying vec3 vNormal; void main(){ vNormal=normalize(normalMatrix*normal); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position,1.); }`,
   fragmentShader: `
-    uniform vec3 uColorA;
-    uniform vec3 uColorB;
-    uniform float uTime;
-    varying vec3 vNormal;
+    ${NOISE}
+    uniform float uTime, uSpeed, uAmp, uWaveAmp;
+    uniform vec3  uColorA, uColorB, uColorC;
+    varying vec2  vUv;
+
     void main(){
-      vec3 viewDir=normalize(cameraPosition-vec3(0));
-      float f=pow(1.-clamp(dot(vNormal,viewDir),0.,1.),1.8);
-      vec3 c=mix(uColorA,uColorB,f);
-      gl_FragColor=vec4(c,f*0.55);
-    }`,
-  transparent: true,
-  side: THREE.BackSide,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false,
-});
-const glowMesh = new THREE.Mesh(new THREE.SphereGeometry(1.28, 32, 32), glowMat);
-scene.add(glowMesh);
+      vec2 uv = vUv;
+      float t = uTime * uSpeed;
 
-// ─── Ground shade ─────────────────────────────────────────────────────────────
-const shadeMat = new THREE.ShaderMaterial({
-  uniforms: {
-    uColor:   { value: hexToRgb('#4c1d95') },
-    uOpacity: { value: 0.5 },
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      // Circular mask
+      vec2 cUv = uv - 0.5;
+      float dist = length(cUv);
+      if(dist > 0.5) { gl_FragColor = vec4(0.); return; }
+
+      // ── Fluid layers ──
+      float n1 = snoise(vec3(uv * 3.0,  t * 0.6));
+      float n2 = snoise(vec3(uv * 6.5,  t * 0.4 + 10.));
+      float n3 = snoise(vec3(uv * 12.0, t * 0.9 + 20.));
+      float fluid = n1 * 0.55 + n2 * 0.30 + n3 * 0.15;
+
+      // ── Wave bands (ocean-like horizontal) ──
+      float warpX = snoise(vec3(uv * 4.0, t * 0.5)) * 0.15;
+      float warpY = snoise(vec3(uv * 4.0 + 5., t * 0.5)) * 0.15;
+      float wave  = sin((uv.y + warpY + warpX) * 14.0 - t * 2.5) * 0.5 + 0.5;
+      wave  = pow(wave, 2.5) * uWaveAmp;
+
+      float pattern = fluid * uAmp + wave * 0.22;
+
+      // ── Color mapping ──
+      vec3 col = mix(uColorA, uColorB, clamp(pattern * 2.0,       0., 1.));
+      col       = mix(col,     uColorC, clamp((pattern - 0.3)*2.5, 0., 1.));
+
+      // ── Depth: dark center core ──
+      float core = 1.0 - smoothstep(0.0, 0.45, dist);
+      col = mix(col, uColorA * 0.4, core * 0.55);
+
+      // ── Edge vignette ──
+      float edge = smoothstep(0.5, 0.3, dist);
+      float rim  = 1.0 - smoothstep(0.46, 0.50, dist);
+      col += uColorC * rim * 0.35;
+
+      gl_FragColor = vec4(col * edge, 1.0);
     }
   `,
-  fragmentShader: `
-    uniform vec3 uColor;
-    uniform float uOpacity;
-    varying vec2 vUv;
-    void main() {
-      float d = length(vUv - 0.5) * 2.0;
-      float alpha = pow(max(1.0 - d, 0.0), 1.4) * uOpacity;
-      gl_FragColor = vec4(uColor, alpha);
-    }
-  `,
-  transparent: true,
-  side: THREE.DoubleSide,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false,
 });
-const shadeGeo = new THREE.CircleGeometry(4.2, 64);
-const shadeMesh = new THREE.Mesh(shadeGeo, shadeMat);
-shadeMesh.rotation.x = -Math.PI / 2;
-shadeMesh.position.y = -1.25;
-scene.add(shadeMesh);
 
-// ─── Floating particles — thin ethereal cloud ─────────────────────────────────
-const PARTICLE_COUNT = 220;
-const pPositions  = new Float32Array(PARTICLE_COUNT * 3);
-const pVelocities = [];
-for (let i = 0; i < PARTICLE_COUNT; i++) {
-  const r     = 2.0 + Math.random() * 2.6;
-  const theta = Math.random() * Math.PI * 2;
-  const phi   = Math.acos(2 * Math.random() - 1);
-  pPositions[i*3]   = r * Math.sin(phi) * Math.cos(theta);
-  pPositions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
-  pPositions[i*3+2] = r * Math.cos(phi);
-  pVelocities.push({
-    theta: Math.random() * 0.003 + 0.001,
-    phi:   (Math.random() - 0.5) * 0.002,
-    r:     2.0 + Math.random() * 2.6,
-  });
+const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), fluidMat);
+scene.add(plane);
+
+// ── Particles (inside orb) ─────────────────────────────────────────────────────
+const P_COUNT = 180;
+const pPositions = new Float32Array(P_COUNT * 3);
+const pSpeeds    = new Float32Array(P_COUNT);
+const pRadii     = new Float32Array(P_COUNT);
+const pAngles    = new Float32Array(P_COUNT);
+
+for(let i = 0; i < P_COUNT; i++){
+  const r   = Math.random() * 0.44;
+  const a   = Math.random() * Math.PI * 2;
+  pRadii[i]     = r;
+  pAngles[i]    = a;
+  pSpeeds[i]    = (Math.random() - 0.5) * 0.008;
+  pPositions[i*3]   = Math.cos(a) * r;
+  pPositions[i*3+1] = Math.sin(a) * r;
+  pPositions[i*3+2] = 0;
 }
+
 const pGeo = new THREE.BufferGeometry();
 pGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
-const pMat = new THREE.PointsMaterial({
-  color: 0x9d78ff,
-  size: 0.016,
+
+const pMat = new THREE.ShaderMaterial({
+  uniforms: { uColor: { value: new THREE.Vector3(...hex2rgb('#4080ff')) } },
+  vertexShader:   `void main(){ gl_PointSize = 2.0; gl_Position = vec4(position * 2.0, 1.0); }`,
+  fragmentShader: `
+    uniform vec3 uColor;
+    void main(){
+      float d = length(gl_PointCoord - 0.5) * 2.0;
+      if(d > 1.0) discard;
+      gl_FragColor = vec4(uColor, (1.0 - d) * 0.7);
+    }`,
   transparent: true,
-  opacity: 0.10,
   blending: THREE.AdditiveBlending,
   depthWrite: false,
 });
-const particles = new THREE.Points(pGeo, pMat);
-scene.add(particles);
 
-const pAngles = new Float32Array(PARTICLE_COUNT * 2);
-for (let i = 0; i < PARTICLE_COUNT; i++) {
-  pAngles[i*2]   = Math.random() * Math.PI * 2;
-  pAngles[i*2+1] = Math.acos(2 * Math.random() - 1);
+const pMesh = new THREE.Points(pGeo, pMat);
+scene.add(pMesh);
+
+// ── Lerp targets ───────────────────────────────────────────────────────────────
+const cur = { speed:0.4, amp:0.12, waveAmp:0.3,
+  ca:[...hex2rgb('#0d0a2e')], cb:[...hex2rgb('#1a0a4a')], cc:[...hex2rgb('#2d1080')] };
+const tgt = { ...cur, ca:[...cur.ca], cb:[...cur.cb], cc:[...cur.cc] };
+let lerpT = 1;
+
+function lerpRGB(a, b, t){ return a.map((v,i) => lerp(v, b[i], t)); }
+
+function applyState(name){
+  const s = STATES[name] || STATES.idle;
+  tgt.speed   = s.speed;
+  tgt.amp     = s.amp;
+  tgt.waveAmp = s.waveAmp;
+  tgt.ca = hex2rgb(s.ca);
+  tgt.cb = hex2rgb(s.cb);
+  tgt.cc = hex2rgb(s.cc);
+  lerpT  = 0;
+  // CSS glow only on the orb
+  wrapper.style.setProperty('--orb-glow', s.glow);
+  wrapper.style.boxShadow = `0 0 40px 4px ${s.glow}, 0 0 80px 8px ${s.glow.replace('0.', '0.0')}`;
 }
 
-// ─── State interpolation ──────────────────────────────────────────────────────
-let currentUniforms = {
-  amp: 0.18, speed: 0.4, bloom: 0.6,
-  cA: hexToRgb('#4c1d95'), cB: hexToRgb('#6d28d9'), cC: hexToRgb('#7c3aed'),
-};
-let targetUniforms = { ...currentUniforms };
+// ── Speaking pulse ─────────────────────────────────────────────────────────────
+let speakPhase = 0, speakBump = 0;
 
-function applyState(stateName) {
-  const s = STATES[stateName] || STATES.idle;
-  targetUniforms = {
-    amp:   s.amp,
-    speed: s.speed,
-    bloom: s.bloom,
-    cA:    hexToRgb(s.colors[0]),
-    cB:    hexToRgb(s.colors[1]),
-    cC:    hexToRgb(s.colors[2]),
-  };
-}
-
-// ─── Speech syllable engine ───────────────────────────────────────────────────
-// Simulates a speech amplitude envelope — drives orb scale, bloom, and shade.
-let speechEnvelope = 0;   // smoothed 0-1 output
-let syllableValue   = 0;  // current raw syllable target
-let syllableTimer   = 0;  // seconds until next syllable event
-let pauseTimer      = 0;  // seconds of word-boundary silence remaining
-
-function tickSpeech(dt) {
-  if (currentState !== 'speaking') {
-    speechEnvelope = lerp(speechEnvelope, 0, 0.07);
-    return;
-  }
-
-  pauseTimer     -= dt;
-  syllableTimer  -= dt;
-
-  if (pauseTimer > 0) {
-    // Brief word-boundary pause — amplitude falls
-    syllableValue = lerp(syllableValue, 0, 1 - Math.pow(0.005, dt));
-  } else if (syllableTimer <= 0) {
-    // Decide next event
-    if (Math.random() < 0.14) {
-      // Word-boundary pause (80-220 ms)
-      pauseTimer    = 0.08 + Math.random() * 0.14;
-      syllableValue = 0;
-    } else {
-      // New syllable: stressed ones are louder & longer
-      const stressed    = Math.random() < 0.35;
-      syllableValue     = stressed ? 0.65 + Math.random() * 0.35 : 0.30 + Math.random() * 0.45;
-      syllableTimer     = stressed ? 0.07 + Math.random() * 0.10 : 0.04 + Math.random() * 0.07;
-    }
-  } else {
-    // Decay within the syllable
-    syllableValue = lerp(syllableValue, syllableValue * 0.88, dt * 8);
-  }
-
-  speechEnvelope = lerp(speechEnvelope, syllableValue, 0.28);
-}
-
-// ─── Animation loop ───────────────────────────────────────────────────────────
+// ── Animate ───────────────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
-let prevTime = 0;
 
-function animate() {
+function animate(){
   requestAnimationFrame(animate);
-  const elapsed = clock.getElapsedTime();
-  const dt      = Math.min(elapsed - prevTime, 0.05);
-  prevTime      = elapsed;
+  const t = clock.getElapsedTime();
 
-  // Lerp uniforms toward target
-  lerpT = Math.min(lerpT + dt * 2.5, 1.0);
-  const ease = 1 - Math.pow(1 - lerpT, 3);
+  // Lerp state
+  lerpT = Math.min(lerpT + 0.018 * 1.8, 1);
+  const e = 1 - Math.pow(1 - lerpT, 3);
+  cur.speed   = lerp(cur.speed,   tgt.speed,   e * 0.06);
+  cur.amp     = lerp(cur.amp,     tgt.amp,     e * 0.06);
+  cur.waveAmp = lerp(cur.waveAmp, tgt.waveAmp, e * 0.06);
+  cur.ca = cur.ca.map((v,i) => lerp(v, tgt.ca[i], e * 0.04));
+  cur.cb = cur.cb.map((v,i) => lerp(v, tgt.cb[i], e * 0.04));
+  cur.cc = cur.cc.map((v,i) => lerp(v, tgt.cc[i], e * 0.04));
 
-  currentUniforms.amp   = lerp(currentUniforms.amp,   targetUniforms.amp,   ease);
-  currentUniforms.speed = lerp(currentUniforms.speed, targetUniforms.speed, ease);
-  currentUniforms.bloom = lerp(currentUniforms.bloom, targetUniforms.bloom, ease);
-  currentUniforms.cA.lerp(targetUniforms.cA, ease * 0.08);
-  currentUniforms.cB.lerp(targetUniforms.cB, ease * 0.08);
-  currentUniforms.cC.lerp(targetUniforms.cC, ease * 0.08);
+  // Speaking pulse
+  if(currentState === 'speaking'){
+    speakPhase += 0.09;
+    speakBump = lerp(speakBump, 0.12 + Math.abs(Math.sin(speakPhase * 3.1)) * 0.2, 0.14);
+  } else {
+    speakBump = lerp(speakBump, 0, 0.07);
+  }
 
-  // Advance speech engine
-  tickSpeech(dt);
+  // Apply to fluid shader
+  fluidMat.uniforms.uTime.value    = t;
+  fluidMat.uniforms.uSpeed.value   = cur.speed;
+  fluidMat.uniforms.uAmp.value     = cur.amp + speakBump;
+  fluidMat.uniforms.uWaveAmp.value = cur.waveAmp + speakBump * 1.5;
+  fluidMat.uniforms.uColorA.value.set(...cur.ca);
+  fluidMat.uniforms.uColorB.value.set(...cur.cb);
+  fluidMat.uniforms.uColorC.value.set(...cur.cc);
 
-  // Orb scale breathes with speech
-  const targetScale = 1.0 + speechEnvelope * 0.14;
-  orb.scale.setScalar(lerp(orb.scale.x, targetScale, 0.22));
-  glowMesh.scale.setScalar(orb.scale.x);
-
-  // Apply to orb material
-  orbMaterial.uniforms.uTime.value      = elapsed;
-  orbMaterial.uniforms.uAmplitude.value = currentUniforms.amp + speechEnvelope * 0.28;
-  orbMaterial.uniforms.uSpeed.value     = currentUniforms.speed;
-  orbMaterial.uniforms.uColorA.value.copy(currentUniforms.cA);
-  orbMaterial.uniforms.uColorB.value.copy(currentUniforms.cB);
-  orbMaterial.uniforms.uColorC.value.copy(currentUniforms.cC);
-
-  // Bloom pulses with speech
-  bloomPass.strength = currentUniforms.bloom + speechEnvelope * 0.75;
-
-  // Ground shade — large, reacts to state color and speech
-  shadeMat.uniforms.uColor.value.copy(currentUniforms.cB);
-  shadeMat.uniforms.uOpacity.value = 0.38 + currentUniforms.amp * 0.25 + speechEnvelope * 0.32;
-
-  // Gentle orb rotation
-  orb.rotation.y = elapsed * 0.12 * currentUniforms.speed;
-  orb.rotation.x = Math.sin(elapsed * 0.07) * 0.08;
-
-  // Particle drift
-  const pPos = pGeo.attributes.position.array;
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    pAngles[i*2]   += pVelocities[i].theta * currentUniforms.speed * 0.5;
-    pAngles[i*2+1] += pVelocities[i].phi   * currentUniforms.speed * 0.5;
-    const r     = pVelocities[i].r;
-    const theta = pAngles[i*2];
-    const phi   = pAngles[i*2+1];
-    pPos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
-    pPos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
-    pPos[i*3+2] = r * Math.cos(phi);
+  // Update particles
+  const pos = pGeo.attributes.position.array;
+  const spd = cur.speed;
+  for(let i = 0; i < P_COUNT; i++){
+    pAngles[i] += pSpeeds[i] * spd;
+    // Drift radius slightly with noise-like sin
+    const r = pRadii[i] + Math.sin(t * 0.7 + i * 0.37) * 0.04;
+    pos[i*3]   = Math.cos(pAngles[i]) * r;
+    pos[i*3+1] = Math.sin(pAngles[i]) * r;
   }
   pGeo.attributes.position.needsUpdate = true;
-  pMat.color.copy(currentUniforms.cC);
-  // Cloud stays very thin; only a whisper brighter during speech
-  pMat.opacity = 0.07 + speechEnvelope * 0.06 + currentUniforms.amp * 0.05;
+  pMat.uniforms.uColor.value.set(...cur.cc);
 
-  composer.render();
+  renderer.render(scene, camera);
 }
 animate();
 
-// ─── Resize ───────────────────────────────────────────────────────────────────
-window.addEventListener('resize', () => {
-  const w = window.innerWidth, h = window.innerHeight;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  renderer.setSize(w, h);
-  composer.setSize(w, h);
-});
-
-// ─── WebSocket ────────────────────────────────────────────────────────────────
-const statusDot    = document.getElementById('status-dot');
-const statusLabel  = document.getElementById('status-label');
-const transcriptEl = document.getElementById('transcript-text');
+// ── UI helpers ────────────────────────────────────────────────────────────────
+const statusDot   = document.getElementById('status-dot');
+const statusLabel = document.getElementById('status-label');
+const transcriptEl = document.getElementById('transcript');
 const reconnectEl  = document.getElementById('reconnect-notice');
 
-function setTranscript(text) {
-  if (!text) return;
+function setTranscript(text){
   transcriptEl.classList.add('fade');
-  setTimeout(() => {
-    transcriptEl.textContent = text;
-    transcriptEl.classList.remove('fade');
-  }, 200);
+  setTimeout(() => { transcriptEl.textContent = text; transcriptEl.classList.remove('fade'); }, 250);
 }
 
-function handleState(state, text) {
+function handleState(state, text){
   currentState = state;
-  lerpT = 0;
   applyState(state);
-
   const s = STATES[state] || STATES.idle;
   statusLabel.textContent = s.label;
-  statusDot.className = '';
-  statusDot.classList.add(state);
+  statusDot.className = state;
 
-  if (state === 'user')      setTranscript('You: ' + text);
-  if (state === 'speaking')  setTranscript('Agent: ' + text);
-  if (state === 'error')     setTranscript('Error: ' + text);
-  if (state === 'idle')      setTranscript('Say something...');
-  if (state === 'listening') setTranscript('Listening...');
-  if (state === 'thinking')  setTranscript('Thinking...');
+  if(state === 'user')      setTranscript('You: ' + text);
+  if(state === 'speaking')  setTranscript(text);
+  if(state === 'error')     setTranscript('Error: ' + text);
+  if(state === 'idle')      setTranscript('Say something…');
+  if(state === 'listening') setTranscript('Listening…');
+  if(state === 'thinking')  setTranscript('Thinking…');
 }
 
-let ws;
-let reconnectDelay = 2000;
-let reconnectScheduled = false;
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+let ws, reconnectDelay = 2000, reconnectScheduled = false;
 
-function scheduleReconnect() {
-  if (reconnectScheduled) return;
+function scheduleReconnect(){
+  if(reconnectScheduled) return;
   reconnectScheduled = true;
   reconnectEl.style.display = 'block';
-  handleState('idle');
-  setTimeout(() => {
-    reconnectScheduled = false;
-    connectWS();
-  }, reconnectDelay);
+  setTimeout(() => { reconnectScheduled = false; connectWS(); }, reconnectDelay);
   reconnectDelay = Math.min(reconnectDelay * 2, 15000);
 }
 
-function connectWS() {
-  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  const host = ['0.0.0.0', ''].includes(location.hostname) ? 'localhost' : location.hostname;
-  const port = location.port ? `:${location.port}` : '';
-  ws = new WebSocket(`${protocol}://${host}${port}/ws`);
+function connectWS(){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const host  = ['0.0.0.0',''].includes(location.hostname) ? 'localhost' : location.hostname;
+  const port  = location.port ? `:${location.port}` : '';
+  ws = new WebSocket(`${proto}://${host}${port}/ws`);
 
   ws.onopen = () => {
     reconnectEl.style.display = 'none';
     reconnectDelay = 2000;
     handleState('idle');
   };
-
   ws.onmessage = (ev) => {
-    try {
-      const msg = JSON.parse(ev.data);
-      handleState(msg.state, msg.text || '');
-    } catch(e) {}
+    try { const m = JSON.parse(ev.data); handleState(m.state, m.text || ''); } catch(e){}
   };
-
   ws.onerror = () => {};
   ws.onclose = () => scheduleReconnect();
 }

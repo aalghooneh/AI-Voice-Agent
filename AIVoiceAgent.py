@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import re
+import threading
 from typing import Callable, Optional
 
 import ollama
@@ -14,6 +15,7 @@ from assemblyai.streaming.v3 import (
     StreamingParameters,
     StreamingEvents,
     TurnEvent,
+    SpeechModel,
 )
 from assemblyai.extras import MicrophoneStream
 
@@ -37,8 +39,6 @@ class AIVoiceAgent:
         self._api_key = os.getenv("ASSEMBLYAI_API_KEY")
         self.elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
         self.on_state_change = on_state_change or (lambda state, text="": None)
-        self._client: Optional[StreamingClient] = None
-        self._mic: Optional[MicrophoneStream] = None
         self._busy = False
 
         self.full_transcript = [
@@ -55,34 +55,20 @@ class AIVoiceAgent:
         self.on_state_change(state, text)
 
     def start_transcription(self):
-        self._busy = False
         self._emit("listening")
         print("\n[Listening...]")
 
-        self._client = StreamingClient(
-            StreamingClientOptions(api_key=self._api_key)
-        )
-        self._client.on(StreamingEvents.Turn, self._on_turn)
-        self._client.on(StreamingEvents.Error, self._on_error)
+        client = StreamingClient(StreamingClientOptions(api_key=self._api_key))
+        client.on(StreamingEvents.Turn, self._on_turn)
+        client.on(StreamingEvents.Error, self._on_error)
+        client.connect(StreamingParameters(
+            sample_rate=16_000,
+            speech_model=SpeechModel.universal_streaming_english,
+            inactivity_timeout=300,
+        ))
 
-        self._client.connect(StreamingParameters(sample_rate=16_000))
-
-        self._mic = MicrophoneStream(sample_rate=16_000)
-        self._client.stream(self._mic)
-
-    def stop_transcription(self):
-        if self._mic:
-            try:
-                self._mic.close()
-            except Exception:
-                pass
-            self._mic = None
-        if self._client:
-            try:
-                self._client.disconnect()
-            except Exception:
-                pass
-            self._client = None
+        mic = MicrophoneStream(sample_rate=16_000)
+        client.stream(mic)  # blocks until mic is closed
 
     def _on_turn(self, client: StreamingClient, event: TurnEvent):
         if not event.transcript or self._busy:
@@ -91,7 +77,10 @@ class AIVoiceAgent:
             print(f"\nUser: {event.transcript}")
             self._emit("user", event.transcript)
             self._busy = True
-            self.generate_ai_response(event.transcript)
+            # Handle in a new thread so we don't block the read loop
+            t = threading.Thread(target=self._handle_response, args=(client, event.transcript))
+            t.daemon = True
+            t.start()
         else:
             print(event.transcript, end="\r")
 
@@ -99,10 +88,8 @@ class AIVoiceAgent:
         print(f"[Error] {error}")
         self._emit("error", str(error))
 
-    def generate_ai_response(self, user_text: str):
-        self.stop_transcription()
+    def _handle_response(self, client: StreamingClient, user_text: str):
         self._emit("thinking", user_text)
-
         self.full_transcript.append({"role": "user", "content": user_text})
 
         ollama_stream = ollama.chat(
@@ -146,7 +133,11 @@ class AIVoiceAgent:
             full_text += remaining
 
         self.full_transcript.append({"role": "assistant", "content": full_text.strip()})
-        self.start_transcription()
+
+        # Resume listening on the same open connection
+        self._busy = False
+        self._emit("listening")
+        print("\n[Listening...]")
 
 
 if __name__ == "__main__":
