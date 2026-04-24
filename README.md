@@ -1,72 +1,109 @@
-# DeepSeek-R1-AI-Voice-Agent 
+# AI Voice Agent
 
-This project enables real-time speech-to-text transcription using **AssemblyAI**, generates AI responses with **DeepSeek R1 (7B model) via Ollama**, and converts text responses into speech using **ElevenLabs**. The entire process happens in real-time, allowing for seamless interaction.  
+A real-time AI voice agent with an animated web UI. Speak into your mic, get an intelligent response spoken back — with a reactive orb that visualizes what the agent is doing.
 
-**Disclaimer**: Using the Assembly ai, you need to add your credit card
-
----
-
-## 🚀 Features  
-- **Real-time speech-to-text** using AssemblyAI  
-- **AI-powered responses** with DeepSeek R1 (7B model) via Ollama  
-- **Instant text-to-speech** conversion with ElevenLabs  
-- **Live audio streaming** for an interactive experience  
+**Stack:** AssemblyAI (speech-to-text) · DeepSeek R1 7B via Ollama (LLM) · ElevenLabs (text-to-speech) · FastAPI + WebSocket (server) · Three.js (orb UI)
 
 ---
 
-## 🛠️ Setup Instructions  
+## Features
 
-### Step 1: Sign Up & Install Dependencies  
+- Real-time speech-to-text using AssemblyAI's streaming v3 API
+- AI responses from DeepSeek R1 (7B) running locally via Ollama
+- Natural text-to-speech via ElevenLabs
+- Animated orb UI with ocean-wave fluid shader and floating particles that reacts to agent state (listening / thinking / speaking)
+- Scrollable conversation history panel alongside the orb
+- Feedback loop prevention — mic is muted while the agent speaks
 
-#### ✅ Get API Keys  
-- **AssemblyAI (for speech-to-text):** [Sign up for a free API key](https://www.assemblyai.com/?utm_source=youtube&utm_medium=referral&utm_campaign=yt_smit_28)  
-- **ElevenLabs (for text-to-speech):** [Sign up for an account](https://elevenlabs.io/)  
+---
 
-#### ✅ Install Ollama  
-DeepSeek R1 is accessed via Ollama. Install Ollama from:  
-🔗 **[Download Ollama](https://ollama.com/)**  
+## Requirements
 
-#### ✅ Install PortAudio (Required for real-time transcription)  
-- **Debian/Ubuntu:**  
-  ```bash
-  apt install portaudio19-dev
-  ```
+- Python 3.10+
+- macOS or Ubuntu/Debian
+- An [AssemblyAI](https://www.assemblyai.com) account with billing enabled (required for real-time streaming)
+- An [ElevenLabs](https://elevenlabs.io) account
 
-  MacOS:
-  ```bash
-  brew install portaudio
-  ```
-####✅ Install Python Libraries
+---
 
-Before running the script, install the required dependencies:
+## Setup
 
+### 1. Install system dependencies
+
+**macOS**
 ```bash
-pip install "assemblyai[extras]"
-pip install ollama
-pip install elevenlabs
+brew install portaudio mpv ollama
 ```
-✅ (MacOS Only) Install MPV for Audio Streaming
 
+**Ubuntu / Debian**
 ```bash
-brew install mpv
+apt install portaudio19-dev mpv
+# Install Ollama separately: https://ollama.com
 ```
-### Step 2: Download the DeepSeek R1 Model
-Since this script uses DeepSeek R1 via Ollama, download the model locally by running:
+
+### 2. Pull the model
 
 ```bash
+ollama serve &
 ollama pull deepseek-r1:7b
 ```
 
-## 🛠️ Setup with the install.sh script
-Alternatively you could use our install.sh script to take care of the setup.
+### 3. Install Python dependencies
+
 ```bash
-chmod +x install.sh
-./install.sh
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### 🎯 Running the Script
+### 4. Configure API keys
 
-Once all dependencies are installed and the model is downloaded, simply run:
+Create a `.env` file in the project root:
+
+```
+ASSEMBLYAI_API_KEY=your_assemblyai_key
+ELEVENLABS_API_KEY=your_elevenlabs_key
+```
+
+> **Note:** Never commit `.env` to version control. It is already listed in `.gitignore`.
+
+### 5. Run
+
+```bash
+uvicorn server:app --host 0.0.0.0 --port 8000
+```
+
+Open `http://localhost:8000` in your browser and start talking.
+
+---
+
+## Project structure
+
+```
+AIVoiceAgent.py   # Core agent — STT → LLM → TTS pipeline with state callbacks
+server.py         # FastAPI server — runs agent in background thread, streams state over WebSocket
+frontend/
+  index.html      # Single-file UI — Three.js orb + conversation history
+requirements.txt
+install.sh        # Automated setup script (macOS / Ubuntu)
+```
+
+---
+
+## How it works
+
+1. AssemblyAI streams audio from your microphone and fires a `TurnEvent` when you finish a sentence
+2. The agent mutes the mic, sends your text to DeepSeek R1 via Ollama
+3. Responses are streamed sentence by sentence to ElevenLabs for TTS playback
+4. Each state change (`listening` → `thinking` → `speaking`) is broadcast over WebSocket to the browser
+5. The orb shifts color, wave intensity, and particle speed to match the current state
+6. After speaking, the mic is unmuted and AssemblyAI's buffer is flushed to prevent echo feedback
+
+---
+
+## Terminal-only mode
+
+If you don't need the browser UI:
 
 ```bash
 python AIVoiceAgent.py

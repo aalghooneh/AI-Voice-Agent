@@ -14,30 +14,40 @@
       color: #c8c0e8;
       height: 100vh;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 32px;
     }
 
-    #orb-wrapper {
-      position: relative;
-      width: 300px;
-      height: 300px;
-      border-radius: 50%;
-      overflow: hidden;
-      /* glow stays ON the orb, not the page */
-      box-shadow:
-        0 0 40px 4px var(--orb-glow, rgba(100,80,220,0.35)),
-        0 0 80px 8px var(--orb-glow, rgba(100,80,220,0.15));
-      transition: box-shadow 0.8s ease;
+    /* ── Centered stage: orb + history side by side ─────────── */
+    #stage {
+      display: flex;
+      align-items: center;
+      gap: 36px;
+    }
+
+    /* ── Orb column ──────────────────────────────────────────── */
+    #orb-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
       flex-shrink: 0;
     }
 
+    #orb-wrapper {
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      overflow: hidden;
+      box-shadow:
+        0 0 40px 4px rgba(100,80,220,0.35),
+        0 0 80px 8px rgba(100,80,220,0.12);
+      transition: box-shadow 0.9s ease;
+    }
     #orb-wrapper canvas {
       display: block;
-      width: 300px !important;
-      height: 300px !important;
+      width: 280px !important;
+      height: 280px !important;
     }
 
     #status-pill {
@@ -45,22 +55,20 @@
       align-items: center;
       gap: 8px;
       background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.09);
       border-radius: 999px;
       padding: 6px 18px;
-      font-size: 12px;
+      font-size: 11px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: rgba(200,190,240,0.7);
+      color: rgba(200,190,240,0.6);
     }
-
     #status-dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
+      width: 7px; height: 7px; border-radius: 50%;
       background: rgba(120,100,220,0.8);
     }
     #status-dot.listening { background:#34d399; animation: blink 1.2s ease infinite; }
-    #status-dot.thinking  { background:#fbbf24; animation: spin  1.4s linear  infinite; }
+    #status-dot.thinking  { background:#fbbf24; animation: hue   1.4s linear  infinite; }
     #status-dot.speaking  { background:#60a5fa; animation: blink 0.5s ease infinite; }
     #status-dot.error     { background:#f87171; }
 
@@ -68,41 +76,109 @@
       0%,100%{ opacity:1; transform:scale(1);   }
       50%    { opacity:.4; transform:scale(1.5); }
     }
-    @keyframes spin {
-      from{ filter:hue-rotate(0deg);   }
+    @keyframes hue {
+      from{ filter:hue-rotate(0deg); }
       to  { filter:hue-rotate(360deg); }
     }
 
-    #transcript {
-      max-width: 360px;
+    #live-transcript {
+      font-size: 12px;
+      color: rgba(200,185,255,0.4);
       text-align: center;
-      font-size: 14px;
-      line-height: 1.65;
-      color: rgba(200,185,255,0.7);
-      min-height: 48px;
-      padding: 0 8px;
-      transition: opacity 0.3s ease;
+      max-width: 280px;
+      min-height: 18px;
+      transition: opacity 0.25s;
     }
-    #transcript.fade { opacity: 0; }
+    #live-transcript.fade { opacity: 0; }
+
+    /* ── History column ──────────────────────────────────────── */
+    #history-panel {
+      width: 280px;
+      height: 360px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+    }
+
+    #history-scroll {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 16px 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scrollbar-width: none;
+    }
+    #history-scroll::-webkit-scrollbar { display: none; }
+
+    /* ── Messages ────────────────────────────────────────────── */
+    .msg {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      animation: fadeUp 0.25s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(5px); }
+      to   { opacity:1; transform:translateY(0);   }
+    }
+
+    .msg-label {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      opacity: 0.35;
+      padding: 0 2px;
+    }
+    .msg.user  .msg-label { color: #34d399; }
+    .msg.ai    .msg-label { color: #60a5fa; }
+    .msg.think .msg-label { color: #fbbf24; }
+
+    .msg-bubble {
+      padding: 0 2px;
+      font-size: 13px;
+      line-height: 1.65;
+      background: rgba(255,255,255,0.03);
+      border-radius: 6px;
+      word-break: break-word;
+    }
+    /* only font color differs — no borders, same bg */
+    .msg.user  .msg-bubble { color: rgba(160,240,200,0.75); }
+    .msg.ai    .msg-bubble { color: rgba(185,215,255,0.75); }
+    .msg.think .msg-bubble { color: rgba(255,210,100,0.5); font-style: italic; }
+
+    .think-dots::after {
+      content: '';
+      animation: dots 1.4s steps(4, end) infinite;
+    }
+    @keyframes dots {
+      0%  { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
 
     #title {
       position: fixed;
-      top: 24px;
+      top: 22px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 11px;
+      font-size: 10px;
       letter-spacing: 0.25em;
       text-transform: uppercase;
-      color: rgba(160,140,220,0.3);
+      color: rgba(160,140,220,0.2);
     }
 
     #reconnect-notice {
       position: fixed;
-      bottom: 20px;
+      bottom: 18px;
       left: 50%;
       transform: translateX(-50%);
       font-size: 11px;
-      color: rgba(248,113,113,0.6);
+      color: rgba(248,113,113,0.5);
       display: none;
     }
   </style>
@@ -111,14 +187,22 @@
 
 <p id="title">AI Voice Agent</p>
 
-<div id="orb-wrapper"></div>
+<div id="stage">
+  <!-- orb -->
+  <div id="orb-col">
+    <div id="orb-wrapper"></div>
+    <div id="status-pill">
+      <div id="status-dot"></div>
+      <span id="status-label">Connecting</span>
+    </div>
+    <p id="live-transcript">Connecting…</p>
+  </div>
 
-<div id="status-pill">
-  <div id="status-dot"></div>
-  <span id="status-label">Connecting</span>
+  <!-- history -->
+  <div id="history-panel">
+    <div id="history-scroll"></div>
+  </div>
 </div>
-
-<p id="transcript">Connecting to agent...</p>
 
 <div id="reconnect-notice">Connection lost — reconnecting…</div>
 
@@ -135,25 +219,19 @@ const STATES = {
 };
 
 let currentState = 'idle';
+function lerp(a,b,t){ return a+(b-a)*t; }
+function hex2rgb(h){ return [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255]; }
 
-function lerp(a, b, t) { return a + (b - a) * t; }
-function hex2rgb(h) {
-  return [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255];
-}
-
-// ── Three.js — contained 300×300 canvas ───────────────────────────────────────
-const SIZE = 300;
+// ── Three.js orb ─────────────────────────────────────────────────────────────
+const SIZE = 280;
 const wrapper = document.getElementById('orb-wrapper');
-
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
 renderer.setSize(SIZE, SIZE);
 wrapper.appendChild(renderer.domElement);
-
 const scene  = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const camera = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
 
-// ── Noise GLSL ─────────────────────────────────────────────────────────────────
 const NOISE = `
 vec3 mod289v3(vec3 x){return x-floor(x*(1./289.))*289.;}
 vec4 mod289v4(vec4 x){return x-floor(x*(1./289.))*289.;}
@@ -180,192 +258,164 @@ float snoise(vec3 v){
   return 42.*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
 }`;
 
-// ── Ocean fluid plane ──────────────────────────────────────────────────────────
 const fluidMat = new THREE.ShaderMaterial({
   uniforms: {
-    uTime:    { value: 0 },
-    uSpeed:   { value: 0.4 },
-    uAmp:     { value: 0.12 },
-    uWaveAmp: { value: 0.3 },
-    uColorA:  { value: new THREE.Vector3(...hex2rgb('#0d0a2e')) },
-    uColorB:  { value: new THREE.Vector3(...hex2rgb('#1a0a4a')) },
-    uColorC:  { value: new THREE.Vector3(...hex2rgb('#2d1080')) },
+    uTime:{ value:0 }, uSpeed:{ value:0.4 }, uAmp:{ value:0.12 }, uWaveAmp:{ value:0.3 },
+    uColorA:{ value:new THREE.Vector3(...hex2rgb('#0d0a2e')) },
+    uColorB:{ value:new THREE.Vector3(...hex2rgb('#1a0a4a')) },
+    uColorC:{ value:new THREE.Vector3(...hex2rgb('#2d1080')) },
   },
-  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position,1.); }`,
-  fragmentShader: `
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position,1.); }`,
+  fragmentShader:`
     ${NOISE}
-    uniform float uTime, uSpeed, uAmp, uWaveAmp;
-    uniform vec3  uColorA, uColorB, uColorC;
-    varying vec2  vUv;
-
+    uniform float uTime,uSpeed,uAmp,uWaveAmp;
+    uniform vec3 uColorA,uColorB,uColorC;
+    varying vec2 vUv;
     void main(){
-      vec2 uv = vUv;
-      float t = uTime * uSpeed;
-
-      // Circular mask
-      vec2 cUv = uv - 0.5;
-      float dist = length(cUv);
-      if(dist > 0.5) { gl_FragColor = vec4(0.); return; }
-
-      // ── Fluid layers ──
-      float n1 = snoise(vec3(uv * 3.0,  t * 0.6));
-      float n2 = snoise(vec3(uv * 6.5,  t * 0.4 + 10.));
-      float n3 = snoise(vec3(uv * 12.0, t * 0.9 + 20.));
-      float fluid = n1 * 0.55 + n2 * 0.30 + n3 * 0.15;
-
-      // ── Wave bands (ocean-like horizontal) ──
-      float warpX = snoise(vec3(uv * 4.0, t * 0.5)) * 0.15;
-      float warpY = snoise(vec3(uv * 4.0 + 5., t * 0.5)) * 0.15;
-      float wave  = sin((uv.y + warpY + warpX) * 14.0 - t * 2.5) * 0.5 + 0.5;
-      wave  = pow(wave, 2.5) * uWaveAmp;
-
-      float pattern = fluid * uAmp + wave * 0.22;
-
-      // ── Color mapping ──
-      vec3 col = mix(uColorA, uColorB, clamp(pattern * 2.0,       0., 1.));
-      col       = mix(col,     uColorC, clamp((pattern - 0.3)*2.5, 0., 1.));
-
-      // ── Depth: dark center core ──
-      float core = 1.0 - smoothstep(0.0, 0.45, dist);
-      col = mix(col, uColorA * 0.4, core * 0.55);
-
-      // ── Edge vignette ──
-      float edge = smoothstep(0.5, 0.3, dist);
-      float rim  = 1.0 - smoothstep(0.46, 0.50, dist);
-      col += uColorC * rim * 0.35;
-
-      gl_FragColor = vec4(col * edge, 1.0);
-    }
-  `,
-});
-
-const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), fluidMat);
-scene.add(plane);
-
-// ── Particles (inside orb) ─────────────────────────────────────────────────────
-const P_COUNT = 180;
-const pPositions = new Float32Array(P_COUNT * 3);
-const pSpeeds    = new Float32Array(P_COUNT);
-const pRadii     = new Float32Array(P_COUNT);
-const pAngles    = new Float32Array(P_COUNT);
-
-for(let i = 0; i < P_COUNT; i++){
-  const r   = Math.random() * 0.44;
-  const a   = Math.random() * Math.PI * 2;
-  pRadii[i]     = r;
-  pAngles[i]    = a;
-  pSpeeds[i]    = (Math.random() - 0.5) * 0.008;
-  pPositions[i*3]   = Math.cos(a) * r;
-  pPositions[i*3+1] = Math.sin(a) * r;
-  pPositions[i*3+2] = 0;
-}
-
-const pGeo = new THREE.BufferGeometry();
-pGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
-
-const pMat = new THREE.ShaderMaterial({
-  uniforms: { uColor: { value: new THREE.Vector3(...hex2rgb('#4080ff')) } },
-  vertexShader:   `void main(){ gl_PointSize = 2.0; gl_Position = vec4(position * 2.0, 1.0); }`,
-  fragmentShader: `
-    uniform vec3 uColor;
-    void main(){
-      float d = length(gl_PointCoord - 0.5) * 2.0;
-      if(d > 1.0) discard;
-      gl_FragColor = vec4(uColor, (1.0 - d) * 0.7);
+      vec2 uv=vUv; float t=uTime*uSpeed;
+      vec2 cUv=uv-0.5; float dist=length(cUv);
+      if(dist>0.5){ gl_FragColor=vec4(0.); return; }
+      float n1=snoise(vec3(uv*3.0,t*0.6));
+      float n2=snoise(vec3(uv*6.5,t*0.4+10.));
+      float n3=snoise(vec3(uv*12.0,t*0.9+20.));
+      float fluid=n1*0.55+n2*0.30+n3*0.15;
+      float warpX=snoise(vec3(uv*4.0,t*0.5))*0.15;
+      float warpY=snoise(vec3(uv*4.0+5.,t*0.5))*0.15;
+      float wave=sin((uv.y+warpY+warpX)*14.0-t*2.5)*0.5+0.5;
+      wave=pow(wave,2.5)*uWaveAmp;
+      float pattern=fluid*uAmp+wave*0.22;
+      vec3 col=mix(uColorA,uColorB,clamp(pattern*2.0,0.,1.));
+      col=mix(col,uColorC,clamp((pattern-0.3)*2.5,0.,1.));
+      float core=1.0-smoothstep(0.0,0.45,dist);
+      col=mix(col,uColorA*0.4,core*0.55);
+      float edge=smoothstep(0.5,0.3,dist);
+      float rim=1.0-smoothstep(0.46,0.50,dist);
+      col+=uColorC*rim*0.35;
+      gl_FragColor=vec4(col*edge,1.0);
     }`,
-  transparent: true,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false,
 });
+scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), fluidMat));
 
-const pMesh = new THREE.Points(pGeo, pMat);
-scene.add(pMesh);
+// particles
+const P=180, pPos=new Float32Array(P*3), pSpd=new Float32Array(P), pRad=new Float32Array(P), pAng=new Float32Array(P);
+for(let i=0;i<P;i++){
+  const r=Math.random()*0.44, a=Math.random()*Math.PI*2;
+  pRad[i]=r; pAng[i]=a; pSpd[i]=(Math.random()-0.5)*0.008;
+  pPos[i*3]=Math.cos(a)*r; pPos[i*3+1]=Math.sin(a)*r;
+}
+const pGeo=new THREE.BufferGeometry();
+pGeo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
+const pMat=new THREE.ShaderMaterial({
+  uniforms:{ uColor:{ value:new THREE.Vector3(...hex2rgb('#4080ff')) } },
+  vertexShader:`void main(){ gl_PointSize=2.0; gl_Position=vec4(position*2.0,1.0); }`,
+  fragmentShader:`uniform vec3 uColor; void main(){ float d=length(gl_PointCoord-0.5)*2.0; if(d>1.0)discard; gl_FragColor=vec4(uColor,(1.0-d)*0.7); }`,
+  transparent:true, blending:THREE.AdditiveBlending, depthWrite:false,
+});
+scene.add(new THREE.Points(pGeo,pMat));
 
-// ── Lerp targets ───────────────────────────────────────────────────────────────
-const cur = { speed:0.4, amp:0.12, waveAmp:0.3,
-  ca:[...hex2rgb('#0d0a2e')], cb:[...hex2rgb('#1a0a4a')], cc:[...hex2rgb('#2d1080')] };
-const tgt = { ...cur, ca:[...cur.ca], cb:[...cur.cb], cc:[...cur.cc] };
-let lerpT = 1;
-
-function lerpRGB(a, b, t){ return a.map((v,i) => lerp(v, b[i], t)); }
-
+// lerp state
+const cur={ speed:.4, amp:.12, waveAmp:.3, ca:hex2rgb('#0d0a2e'), cb:hex2rgb('#1a0a4a'), cc:hex2rgb('#2d1080') };
+const tgt={ ...cur, ca:[...cur.ca], cb:[...cur.cb], cc:[...cur.cc] };
+let lerpT=1;
 function applyState(name){
-  const s = STATES[name] || STATES.idle;
-  tgt.speed   = s.speed;
-  tgt.amp     = s.amp;
-  tgt.waveAmp = s.waveAmp;
-  tgt.ca = hex2rgb(s.ca);
-  tgt.cb = hex2rgb(s.cb);
-  tgt.cc = hex2rgb(s.cc);
-  lerpT  = 0;
-  // CSS glow only on the orb
-  wrapper.style.setProperty('--orb-glow', s.glow);
-  wrapper.style.boxShadow = `0 0 40px 4px ${s.glow}, 0 0 80px 8px ${s.glow.replace('0.', '0.0')}`;
+  const s=STATES[name]||STATES.idle;
+  tgt.speed=s.speed; tgt.amp=s.amp; tgt.waveAmp=s.waveAmp;
+  tgt.ca=hex2rgb(s.ca); tgt.cb=hex2rgb(s.cb); tgt.cc=hex2rgb(s.cc);
+  lerpT=0;
+  wrapper.style.boxShadow=`0 0 40px 4px ${s.glow},0 0 80px 10px ${s.glow.replace(/[\d.]+\)$/,'0.08)')}`;
 }
 
-// ── Speaking pulse ─────────────────────────────────────────────────────────────
-let speakPhase = 0, speakBump = 0;
-
-// ── Animate ───────────────────────────────────────────────────────────────────
-const clock = new THREE.Clock();
-
+let speakPhase=0, speakBump=0;
+const clock=new THREE.Clock();
 function animate(){
   requestAnimationFrame(animate);
-  const t = clock.getElapsedTime();
-
-  // Lerp state
-  lerpT = Math.min(lerpT + 0.018 * 1.8, 1);
-  const e = 1 - Math.pow(1 - lerpT, 3);
-  cur.speed   = lerp(cur.speed,   tgt.speed,   e * 0.06);
-  cur.amp     = lerp(cur.amp,     tgt.amp,     e * 0.06);
-  cur.waveAmp = lerp(cur.waveAmp, tgt.waveAmp, e * 0.06);
-  cur.ca = cur.ca.map((v,i) => lerp(v, tgt.ca[i], e * 0.04));
-  cur.cb = cur.cb.map((v,i) => lerp(v, tgt.cb[i], e * 0.04));
-  cur.cc = cur.cc.map((v,i) => lerp(v, tgt.cc[i], e * 0.04));
-
-  // Speaking pulse
-  if(currentState === 'speaking'){
-    speakPhase += 0.09;
-    speakBump = lerp(speakBump, 0.12 + Math.abs(Math.sin(speakPhase * 3.1)) * 0.2, 0.14);
-  } else {
-    speakBump = lerp(speakBump, 0, 0.07);
-  }
-
-  // Apply to fluid shader
-  fluidMat.uniforms.uTime.value    = t;
-  fluidMat.uniforms.uSpeed.value   = cur.speed;
-  fluidMat.uniforms.uAmp.value     = cur.amp + speakBump;
-  fluidMat.uniforms.uWaveAmp.value = cur.waveAmp + speakBump * 1.5;
+  const t=clock.getElapsedTime();
+  lerpT=Math.min(lerpT+0.032,1);
+  const e=1-Math.pow(1-lerpT,3);
+  cur.speed=lerp(cur.speed,tgt.speed,e*0.06);
+  cur.amp=lerp(cur.amp,tgt.amp,e*0.06);
+  cur.waveAmp=lerp(cur.waveAmp,tgt.waveAmp,e*0.06);
+  cur.ca=cur.ca.map((v,i)=>lerp(v,tgt.ca[i],e*0.04));
+  cur.cb=cur.cb.map((v,i)=>lerp(v,tgt.cb[i],e*0.04));
+  cur.cc=cur.cc.map((v,i)=>lerp(v,tgt.cc[i],e*0.04));
+  if(currentState==='speaking'){ speakPhase+=0.09; speakBump=lerp(speakBump,0.12+Math.abs(Math.sin(speakPhase*3.1))*0.2,0.14); }
+  else speakBump=lerp(speakBump,0,0.07);
+  fluidMat.uniforms.uTime.value=t;
+  fluidMat.uniforms.uSpeed.value=cur.speed;
+  fluidMat.uniforms.uAmp.value=cur.amp+speakBump;
+  fluidMat.uniforms.uWaveAmp.value=cur.waveAmp+speakBump*1.5;
   fluidMat.uniforms.uColorA.value.set(...cur.ca);
   fluidMat.uniforms.uColorB.value.set(...cur.cb);
   fluidMat.uniforms.uColorC.value.set(...cur.cc);
-
-  // Update particles
-  const pos = pGeo.attributes.position.array;
-  const spd = cur.speed;
-  for(let i = 0; i < P_COUNT; i++){
-    pAngles[i] += pSpeeds[i] * spd;
-    // Drift radius slightly with noise-like sin
-    const r = pRadii[i] + Math.sin(t * 0.7 + i * 0.37) * 0.04;
-    pos[i*3]   = Math.cos(pAngles[i]) * r;
-    pos[i*3+1] = Math.sin(pAngles[i]) * r;
+  for(let i=0;i<P;i++){
+    pAng[i]+=pSpd[i]*cur.speed;
+    const r=pRad[i]+Math.sin(t*0.7+i*0.37)*0.04;
+    pPos[i*3]=Math.cos(pAng[i])*r; pPos[i*3+1]=Math.sin(pAng[i])*r;
   }
-  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.position.needsUpdate=true;
   pMat.uniforms.uColor.value.set(...cur.cc);
-
-  renderer.render(scene, camera);
+  renderer.render(scene,camera);
 }
 animate();
 
+// ── History panel ─────────────────────────────────────────────────────────────
+const historyScroll = document.getElementById('history-scroll');
+let thinkingEl  = null;   // the current thinking bubble
+let currentAiEl = null;   // the current AI bubble being built
+
+function scrollHistory(){
+  historyScroll.scrollTo({ top: historyScroll.scrollHeight, behavior: 'smooth' });
+}
+
+function addBubble(role, labelText, bodyText, extraClass=''){
+  const wrap = document.createElement('div');
+  wrap.className = `msg ${role}`;
+
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = labelText;
+
+  const bubble = document.createElement('div');
+  bubble.className = `msg-bubble ${extraClass}`;
+  bubble.textContent = bodyText;
+
+  wrap.appendChild(label);
+  wrap.appendChild(bubble);
+  historyScroll.appendChild(wrap);
+  scrollHistory();
+  return bubble;
+}
+
+function addThinking(){
+  if(thinkingEl) return;
+  thinkingEl = addBubble('think', 'Thinking', '', 'think-dots');
+}
+
+function removeThinking(){
+  if(thinkingEl){
+    thinkingEl.closest('.msg').remove();
+    thinkingEl = null;
+  }
+}
+
+function appendAI(text){
+  if(!currentAiEl){
+    currentAiEl = addBubble('ai', 'Agent', text);
+  } else {
+    currentAiEl.textContent += ' ' + text;
+    scrollHistory();
+  }
+}
+
 // ── UI helpers ────────────────────────────────────────────────────────────────
-const statusDot   = document.getElementById('status-dot');
-const statusLabel = document.getElementById('status-label');
-const transcriptEl = document.getElementById('transcript');
+const statusDot    = document.getElementById('status-dot');
+const statusLabel  = document.getElementById('status-label');
+const liveEl       = document.getElementById('live-transcript');
 const reconnectEl  = document.getElementById('reconnect-notice');
 
-function setTranscript(text){
-  transcriptEl.classList.add('fade');
-  setTimeout(() => { transcriptEl.textContent = text; transcriptEl.classList.remove('fade'); }, 250);
+function setLive(text){
+  liveEl.classList.add('fade');
+  setTimeout(()=>{ liveEl.textContent=text; liveEl.classList.remove('fade'); }, 200);
 }
 
 function handleState(state, text){
@@ -375,43 +425,47 @@ function handleState(state, text){
   statusLabel.textContent = s.label;
   statusDot.className = state;
 
-  if(state === 'user')      setTranscript('You: ' + text);
-  if(state === 'speaking')  setTranscript(text);
-  if(state === 'error')     setTranscript('Error: ' + text);
-  if(state === 'idle')      setTranscript('Say something…');
-  if(state === 'listening') setTranscript('Listening…');
-  if(state === 'thinking')  setTranscript('Thinking…');
+  if(state === 'user'){
+    currentAiEl = null;                       // reset AI accumulator for next turn
+    addBubble('user', 'You', text);
+    setLive('');
+  }
+  if(state === 'thinking'){
+    addThinking();
+    setLive('Thinking…');
+  }
+  if(state === 'speaking'){
+    removeThinking();
+    appendAI(text);
+    setLive(text);
+  }
+  if(state === 'listening'){
+    currentAiEl = null;
+    setLive('Listening…');
+  }
+  if(state === 'idle')  setLive('Say something…');
+  if(state === 'error'){ setLive('Error: '+text); addBubble('think','Error',text); }
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
-let ws, reconnectDelay = 2000, reconnectScheduled = false;
-
+let ws, reconnectDelay=2000, reconnectScheduled=false;
 function scheduleReconnect(){
   if(reconnectScheduled) return;
-  reconnectScheduled = true;
-  reconnectEl.style.display = 'block';
-  setTimeout(() => { reconnectScheduled = false; connectWS(); }, reconnectDelay);
-  reconnectDelay = Math.min(reconnectDelay * 2, 15000);
+  reconnectScheduled=true;
+  reconnectEl.style.display='block';
+  setTimeout(()=>{ reconnectScheduled=false; connectWS(); }, reconnectDelay);
+  reconnectDelay=Math.min(reconnectDelay*2,15000);
 }
-
 function connectWS(){
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const host  = ['0.0.0.0',''].includes(location.hostname) ? 'localhost' : location.hostname;
-  const port  = location.port ? `:${location.port}` : '';
-  ws = new WebSocket(`${proto}://${host}${port}/ws`);
-
-  ws.onopen = () => {
-    reconnectEl.style.display = 'none';
-    reconnectDelay = 2000;
-    handleState('idle');
-  };
-  ws.onmessage = (ev) => {
-    try { const m = JSON.parse(ev.data); handleState(m.state, m.text || ''); } catch(e){}
-  };
-  ws.onerror = () => {};
-  ws.onclose = () => scheduleReconnect();
+  const proto=location.protocol==='https:'?'wss':'ws';
+  const host=['0.0.0.0',''].includes(location.hostname)?'localhost':location.hostname;
+  const port=location.port?`:${location.port}`:'';
+  ws=new WebSocket(`${proto}://${host}${port}/ws`);
+  ws.onopen=()=>{ reconnectEl.style.display='none'; reconnectDelay=2000; handleState('idle'); };
+  ws.onmessage=(ev)=>{ try{ const m=JSON.parse(ev.data); handleState(m.state,m.text||''); }catch(e){} };
+  ws.onerror=()=>{};
+  ws.onclose=()=>scheduleReconnect();
 }
-
 connectWS();
 </script>
 </body>

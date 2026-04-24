@@ -20,6 +20,18 @@ from assemblyai.streaming.v3 import (
 from assemblyai.extras import MicrophoneStream
 
 
+class MutableMicStream(MicrophoneStream):
+    """MicrophoneStream that sends silence while muted, draining PyAudio so it never overflows."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.muted = False
+        self._silence = bytes(self._chunk_size * 2)  # paInt16 = 2 bytes/sample
+
+    def __next__(self):
+        chunk = super().__next__()          # always drain the real buffer
+        return self._silence if self.muted else chunk
+
+
 def read_env():
     try:
         with open(".env", "r") as f:
@@ -40,6 +52,7 @@ class AIVoiceAgent:
         self.elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
         self.on_state_change = on_state_change or (lambda state, text="": None)
         self._busy = False
+        self._mic: Optional[MutableMicStream] = None
 
         self.full_transcript = [
             {
@@ -67,8 +80,8 @@ class AIVoiceAgent:
             inactivity_timeout=300,
         ))
 
-        mic = MicrophoneStream(sample_rate=16_000)
-        client.stream(mic)  # blocks until mic is closed
+        self._mic = MutableMicStream(sample_rate=16_000)
+        client.stream(self._mic)  # blocks until mic is closed
 
     def _on_turn(self, client: StreamingClient, event: TurnEvent):
         if not event.transcript or self._busy:
@@ -89,6 +102,10 @@ class AIVoiceAgent:
         self._emit("error", str(error))
 
     def _handle_response(self, client: StreamingClient, user_text: str):
+        # Mute mic immediately so the speaker output isn't transcribed
+        if self._mic:
+            self._mic.muted = True
+
         self._emit("thinking", user_text)
         self.full_transcript.append({"role": "user", "content": user_text})
 
@@ -134,7 +151,16 @@ class AIVoiceAgent:
 
         self.full_transcript.append({"role": "assistant", "content": full_text.strip()})
 
-        # Resume listening on the same open connection
+        # Wait for room echo to decay, flush AssemblyAI's buffer, then unmute
+        threading.Timer(1.2, self._resume_listening, args=(client,)).start()
+
+    def _resume_listening(self, client: StreamingClient):
+        try:
+            client.force_endpoint()   # discard anything AssemblyAI buffered while muted
+        except Exception:
+            pass
+        if self._mic:
+            self._mic.muted = False
         self._busy = False
         self._emit("listening")
         print("\n[Listening...]")
